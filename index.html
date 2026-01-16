@@ -1,0 +1,1014 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <title>ESP32 Meteo Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- SunCalc per calcoli astronomici -->
+  <script src="https://cdn.jsdelivr.net/npm/suncalc@1.9.0/suncalc.js"></script>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+
+  <style>
+:root {
+  /* PALETTE GRIGIO SCURO */
+  --bg-main: #1d1f26;
+  --bg-panel: #262932;
+  --bg-panel-soft: #2c2f39;
+  --bg-top-tile: #2b2e38;
+  --border-panel: #3a3d4a;
+
+  /* ACCENTI */
+  --accent: #3d7cff;
+  --accent-soft: #2f4f80;
+
+  /* TESTO */
+  --text-main: #f4f4f7;
+  --text-soft: #c5c7d1;
+  --text-muted: #9396a3;
+
+  /* ALLERTA */
+  --danger: #ff5c5c;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: radial-gradient(circle at top, #20284a 0, #05070d 50%);
+  color: var(--text-main);
+  /* permetti scroll verticale in tutte le modalità “grandi” */
+  min-height: 100vh;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+
+.kiosk-root {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 12px;
+  /* niente height fissa: così su mobile può scrollare */
+  min-height: 100vh;
+}
+
+/* TOP BAR DESKTOP (4 colonne) */
+.top-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  min-height: 70px;
+}
+
+.top-tile {
+  background: var(--bg-top-tile);
+  border-radius: 10px;
+  border: 1px solid #242b3d;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.6),
+    0 4px 6px rgba(0, 0, 0, 0.7);
+}
+
+.top-label-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+  margin-bottom: 3px;
+}
+
+.top-label-unit {
+  opacity: 0.8;
+  font-weight: 600;
+}
+
+.top-value {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.top-timer {
+  text-align: center;
+}
+
+/* classi per grid-area mobile */
+.tile-press    {}
+.tile-temp-int {}
+.tile-clock    {}
+.tile-temp-ext {}
+.tile-hum-ext  {}
+
+/* GRIGLIA CENTRALE 2x2 DESKTOP */
+.center-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: 1fr 1fr;
+  gap: 8px;
+  min-height: 0;
+}
+
+.panel {
+  background: var(--bg-panel);
+  border-radius: 10px;
+  border: 1px solid var(--border-panel);
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  box-shadow: 0 6px 10px rgba(0, 0, 0, 0.6);
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-soft);
+  margin-bottom: 4px;
+}
+
+.panel-title {
+  font-weight: 600;
+}
+
+.panel-subtitle {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.chart-kiosk {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Forecast / debug */
+.sun-content {
+  flex: 1;
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.forecast-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+}
+
+.forecast-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+}
+
+.forecast-text-main {
+  font-weight: 600;
+}
+
+.sun-debug {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--text-soft);
+  margin-top: 4px;
+}
+
+.sun-debug span span {
+  font-family: "JetBrains Mono", Menlo, monospace;
+  color: var(--text-main);
+}
+
+.slot-title {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 11px;
+  color: var(--text-soft);
+  margin-bottom: 4px;
+}
+
+/* FASE LUNARE E SOLE */
+.astro-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.moon-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+}
+
+.moon-icon {
+  font-size: 32px;
+  line-height: 1;
+}
+
+.moon-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.moon-phase-name {
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.moon-illumination {
+  font-size: 12px;
+  color: var(--text-soft);
+}
+
+.sun-arc-container {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sun-arc-wrapper {
+  position: relative;
+  height: 60px;
+  margin: 0 10px;
+}
+
+.sun-arc {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 50px;
+  border-radius: 100px 100px 0 0;
+  background: linear-gradient(
+    90deg,
+    #ff6b6b 0%,
+    #ffd93d 20%,
+    #fcf876 40%,
+    #a8e6cf 60%,
+    #6bcbef 80%,
+    #9381ff 100%
+  );
+  opacity: 0.6;
+}
+
+/* ================================
+   SOLE - EMOJI 
+   ================================ */
+.sun-indicator {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  transform: translateX(-50%);
+  transition: all 0.3s ease;
+  z-index: 2;
+  font-size: 28px;
+  line-height: 1;
+  text-align: center;
+  filter: drop-shadow(0 0 12px rgba(255, 200, 0, 0.9));
+}
+
+.sun-indicator::before {
+  content: "☀️";  /* Emoji sole */
+}
+
+/* ================================
+   LUNA 4 - GRIGIO CHIARO CON CRATERI
+   ================================ */
+.moon-indicator {
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  /* Grigio medio-chiaro */
+  background: 
+    radial-gradient(circle at 38% 32%, 
+      #ececf2 0%,
+      #d8d8e2 30%,
+      #c0c0d0 60%,
+      #a8a8b8 100%
+    );
+  transform: translateX(-50%);
+  transition: all 0.3s ease;
+  z-index: 1;
+  box-shadow:
+    0 0 14px rgba(220, 220, 235, 0.7),
+    0 0 8px rgba(230, 230, 245, 0.5),
+    inset -3px -3px 6px rgba(0, 0, 0, 0.12);
+}
+
+/* Crateri ben visibili */
+.moon-indicator::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background-image: 
+    /* Cratere Tycho (grande, alto) */
+    radial-gradient(circle 3px at 40% 22%, rgba(140, 140, 160, 0.45) 30%, transparent 70%),
+    /* Mare Tranquillitatis (macchia scura centro) */
+    radial-gradient(ellipse 8px 6px at 45% 55%, rgba(155, 155, 175, 0.28) 40%, transparent 80%),
+    /* Cratere Copernicus (medio, sx) */
+    radial-gradient(circle 4px at 28% 45%, rgba(145, 145, 165, 0.38) 35%, transparent 75%),
+    /* Cratere Plato (piccolo, alto-dx) */
+    radial-gradient(circle 2.5px at 65% 30%, rgba(150, 150, 170, 0.35) 40%, transparent 80%);
+}
+
+/* Micro-crateri */
+.moon-indicator::after {
+  content: "";
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: rgba(130, 130, 150, 0.35);
+  top: 38%;
+  left: 58%;
+  box-shadow:
+    -8px 8px 0 0 rgba(130, 130, 150, 0.35),
+    12px -4px 0 0 rgba(130, 130, 150, 0.35),
+    -4px -10px 0 0 rgba(130, 130, 150, 0.35),
+    10px 10px 0 0 rgba(130, 130, 150, 0.35);
+}
+
+.celestial-times {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: var(--text-soft);
+  padding: 0 10px;
+  font-weight: 500;
+  gap: 8px;
+}
+
+.time-label {
+  font-family: "JetBrains Mono", Menlo, monospace;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+/* FOOTER + META */
+.meta-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-soft);
+  margin: 0 2px 2px;
+}
+
+.meta-row span span {
+  font-family: "JetBrains Mono", Menlo, monospace;
+  color: var(--text-main);
+}
+
+.footer-bar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.footer-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.footer-title {
+  font-weight: 600;
+}
+
+.status-line {
+  color: var(--text-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.footer-center {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.btn-range {
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid #2b3144;
+  background: #141927;
+  color: var(--text-soft);
+  cursor: pointer;
+  font-size: 11px;
+  min-width: 32px;
+  text-align: center;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.btn-range.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+  box-shadow: 0 0 6px rgba(45, 140, 255, 0.9);
+}
+
+.footer-right {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.btn-small {
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid #383f53;
+  background: #161c2b;
+  color: var(--text-soft);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.btn-small.danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.chart-kiosk .plot-container,
+.chart-kiosk .svg-container {
+  background: transparent !important;
+}
+
+/* Unità di misura piccole per TUTTE le risoluzioni */
+.unit-small {
+  font-size: 0.5em;
+  font-weight: 400;
+  opacity: 0.9;
+}
+
+/* ================================
+   1) MONITOR 800x480 ORIZZONTALE
+   ================================ */
+@media (min-width: 700px) and (max-width: 900px) 
+       and (max-height: 600px) and (orientation: landscape) {
+  body {
+    overflow: hidden;
+    height: 480px;
+  }
+
+  .kiosk-root {
+    height: 480px;
+    padding: 3px 4px;
+    gap: 3px;
+  }
+
+  .top-row {
+    min-height: 38px;
+    gap: 3px;
+  }
+
+  .top-tile {
+    padding: 2px 4px;
+    position: relative;
+  }
+
+  /* NASCONDE le etichette principali (Pressione, Temperatura, Ora locale) */
+  .top-label-row > span:first-child {
+    display: none !important;
+  }
+
+  /* MA mostra INT/EXT in alto a destra */
+  .top-label-row {
+    position: absolute;
+    top: 2px;
+    right: 4px;
+    margin-bottom: 0;
+  }
+
+  .top-label-unit {
+    font-size: 9px !important;
+    font-weight: 600;
+    opacity: 0.8;
+  }
+
+  /* VALORI GRANDI ma un po' meno */
+  .top-value {
+    font-size: 28px !important;
+    font-weight: 700;
+    text-align: center;
+    padding-top: 12px;
+  }
+
+  /* OROLOGIO - centrato verticalmente */
+  .tile-clock {
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    align-items: center !important;
+  }
+
+  .tile-clock .top-value {
+    font-size: 32px !important;
+    padding-top: 0 !important;
+    margin-bottom: 2px;
+  }
+
+  /* "ORA LOCALE" centrata sotto */
+  .tile-clock .top-label-row {
+    position: static !important;
+    text-align: center;
+    margin-top: 0;
+  }
+
+  .tile-clock .top-label-row span {
+    display: inline !important;
+    font-size: 9px !important;
+    text-transform: uppercase;
+    opacity: 0.8;
+  }
+
+  /* Unità di misura PICCOLE (hPa, °C, %) */
+  .unit-small {
+    font-size: 14px !important;
+    font-weight: 400;
+    opacity: 0.9;
+  }
+
+  .center-grid {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 3px;
+  }
+
+  .panel {
+    padding: 3px 4px;
+  }
+
+  .panel-header {
+    font-size: 9px;
+    margin-bottom: 1px;
+  }
+
+  .panel-subtitle {
+    font-size: 8px;
+  }
+
+  .panel-title {
+    font-size: 9px;
+  }
+
+  .sun-content {
+    display: grid !important;
+    grid-template-columns: 2fr 1fr !important;  /* Previsioni 2/3, Luna 1/3 */
+    grid-template-rows: auto auto !important;
+    grid-template-areas:
+      "forecast moon"
+      "sun-arc sun-arc" !important;
+    gap: 4px !important;
+    padding: 4px !important;
+  }
+
+  /* NASCONDE le scritte tecniche (ΔP 3h, Umidità, Soglie) */
+  .sun-debug {
+    display: none !important;
+  }
+
+  /* PREVISIONI - top left */
+  .forecast-row {
+    grid-area: forecast !important;
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 4px !important;
+    align-items: flex-start !important;
+  }
+
+  .forecast-icon {
+    font-size: 32px !important;
+    line-height: 1 !important;
+  }
+
+  .forecast-text-main {
+    font-size: 10px !important;
+    line-height: 1.3 !important;
+  }
+
+  /* CONTENITORE ASTRO - gestisce moon e sun-arc */
+  .astro-info {
+    display: contents !important;  /* Fa diventare i figli diretti della griglia */
+  }
+
+  /* LUNA - top right */
+  .moon-row {
+    grid-area: moon !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 2px !important;
+    padding: 2px !important;
+    font-size: 10px !important;
+    position: static !important;
+    margin: 0 !important;
+  }
+
+  .moon-icon {
+    font-size: 24px !important;
+  }
+
+  .moon-phase-name {
+    font-size: 12px !important;
+    font-weight: 600 !important;
+  }
+
+  .moon-illumination {
+    font-size: 12px !important;
+    font-weight: 600 !important;
+  }
+
+  /* ARCOBALENO SOLE - bottom full width */
+  .sun-arc-container {
+    grid-area: sun-arc !important;
+  }
+
+  .sun-arc-wrapper {
+    height: 60px !important;
+    margin: 0 !important;
+  }
+
+  .sun-arc {
+    height: 55px;
+  }
+
+  .celestial-times {
+    font-size: 9px;
+    padding: 2px 10px 0;
+    margin-top: 0;
+  }
+
+  .meta-row {
+    font-size: 8px;
+    margin: 0 2px 0;
+  }
+
+  .footer-bar {
+    min-height: 20px;
+    font-size: 9px;
+    gap: 3px;
+    margin-top: 0;
+  }
+
+  .footer-left {
+    gap: 1px;
+  }
+
+  .footer-title {
+    font-size: 9px;
+  }
+
+  .status-line {
+    font-size: 8px;
+  }
+
+  .btn-range {
+    padding: 3px 8px;
+    font-size: 11px;
+    min-width: 32px;
+  }
+
+  .btn-small {
+    padding: 3px 8px;
+    font-size: 10px;
+  }
+
+  .chart-kiosk {
+    font-size: 10px;
+  }
+}
+
+/* ================================
+   2) SMARTPHONE VERTICALE
+   ================================ */
+@media screen and (orientation: portrait) and (max-width: 650px) {
+  body {
+    overflow-y: auto !important;
+    height: auto !important;
+  }
+
+  .kiosk-root {
+    height: auto !important;
+    min-height: 100vh !important;
+    padding: 8px !important;
+    gap: 8px !important;
+  }
+
+  /* TOPBAR: 3 righe tipo mobile */
+  .top-row {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    grid-template-rows: auto auto auto !important;
+    grid-template-areas:
+      "clock clock"
+      "press temp-ext"
+      "hum-ext hum-ext";
+    gap: 6px !important;
+    min-height: auto !important;
+  }
+
+  .tile-clock {
+    grid-area: clock;
+    text-align: center;
+  }
+
+  .tile-press    { grid-area: press; }
+  .tile-temp-ext { grid-area: temp-ext; }
+  .tile-hum-ext  { grid-area: hum-ext; }
+
+  .top-tile {
+    padding: 6px 8px !important;
+  }
+
+  .top-value {
+    font-size: 20px !important;
+  }
+
+  .top-label-row {
+    font-size: 10px !important;
+  }
+
+  /* QUADRANTI: colonna con scroll, pannelli auto */
+  .center-grid {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+    flex: 0 0 auto !important;
+  }
+
+  /* RIORDINO PANNELLI SU MOBILE */
+  .panel-meteo {
+    order: 1 !important; /* Meteo + sole/luna per primo */
+  }
+  
+  .panel-press {
+    order: 2 !important; /* Pressione secondo */
+  }
+  
+  .panel-temp {
+    order: 3 !important; /* Temperatura terzo */
+  }
+  
+  .panel-hum {
+    order: 4 !important; /* Umidità quarto */
+  }
+
+  .panel {
+    flex: 0 0 auto !important;
+    padding: 8px 10px !important;
+  }
+
+  /* grafici alti, non schiacciati */
+  .chart-kiosk {
+    flex: 0 0 260px !important;
+    height: 260px !important;
+    min-height: 260px !important;
+    width: 100% !important;
+  }
+
+  .sun-content {
+    display: grid !important;
+    grid-template-rows: auto auto auto !important;
+    gap: 6px !important;
+    align-items: flex-start !important;
+    padding: 8px 0 !important;
+  }
+
+  /* META + FOOTER multiriga */
+  .meta-row {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 4px !important;
+    font-size: 11px !important;
+    margin: 4px 0 !important;
+  }
+
+  .footer-bar {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    grid-template-rows: auto auto auto !important;
+    gap: 8px !important;
+    min-height: auto !important;
+  }
+
+  .footer-left {
+    order: 1 !important;
+  }
+
+  .footer-center {
+    order: 2 !important;
+    display: flex !important;
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+    gap: 4px !important;
+  }
+
+  .footer-right {
+    order: 3 !important;
+    display: flex !important;
+    justify-content: center !important;
+    gap: 8px !important;
+  }
+
+  .btn-range {
+    padding: 4px 10px !important;
+    font-size: 12px !important;
+  }
+
+  .btn-small {
+    padding: 4px 12px !important;
+    font-size: 12px !important;
+  }
+}
+  </style>
+</head>
+
+<body>
+  <div class="kiosk-root">
+    <!-- TOP BAR -->
+    <div class="top-row">
+      <div class="top-tile tile-press">
+        <div class="top-label-row">
+          <span>Pressione</span>
+          <span class="top-label-unit">ESP32</span>
+        </div>
+        <div class="top-value" id="stat-press">-- hPa</div>
+      </div>
+
+      <div class="top-tile top-timer tile-clock">
+        <div class="top-label-row">
+          <span>Ora locale</span>
+        </div>
+        <div class="top-value" id="clock-time">--:--:--</div>
+      </div>
+
+      <div class="top-tile tile-temp-ext">
+        <div class="top-label-row">
+          <span>Temperatura</span>
+          <span class="top-label-unit">ESP32</span>
+        </div>
+        <div class="top-value" id="stat-temp-ext">-- °C</div>
+      </div>
+
+      <div class="top-tile tile-hum-ext">
+        <div class="top-label-row">
+          <span>Umidità</span>
+          <span class="top-label-unit">ESP32</span>
+        </div>
+        <div class="top-value" id="stat-hum-ext">-- %</div>
+      </div>
+    </div>
+
+    <!-- GRIGLIA CENTRALE 2x2 -->
+    <div class="center-grid">
+      <!-- PRESSIONE -->
+      <div class="panel panel-press">
+        <div class="panel-header">
+          <span class="panel-title">Pressione</span>
+          <span class="panel-subtitle" id="press-minmax">--</span>
+        </div>
+        <div id="chart-press" class="chart-kiosk"></div>
+      </div>
+
+      <!-- TENDENZA METEO -->
+      <div class="panel panel-meteo">
+        <div class="panel-header">
+          <span class="panel-title">Tendenza meteo (6h)</span>
+          <span class="panel-subtitle">ΔP 3h, UR, regole</span>
+        </div>
+        <div class="sun-content">
+          <div class="forecast-row">
+            <div class="forecast-icon" id="forecast-icon">ℹ️</div>
+            <div>
+              <div class="forecast-text-main" id="forecast-text">
+                Caricamento dati da ThingSpeak…
+              </div>
+            </div>
+          </div>
+          <div class="sun-debug">
+            <span>ΔP 3h: <span id="debug-dp3h">n/d</span></span>
+            <span>Umidità interna: <span id="debug-rh">n/d</span></span>
+            <span>Soglie: <span id="debug-thresh"></span></span>
+          </div>
+
+          <!-- FASE LUNARE E POSIZIONE SOLE -->
+          <div class="astro-info">
+            <!-- Fase lunare -->
+            <div class="moon-row">
+              <div class="moon-icon" id="moon-icon">🌙</div>
+              <div class="moon-details">
+                <div class="moon-phase-name" id="moon-phase">Luna</div>
+                <div class="moon-illumination" id="moon-illumination">Caricamento.</div>
+              </div>
+            </div>
+
+            <!-- Arcobaleno sole e luna -->
+            <div class="sun-arc-container">
+              <div class="sun-arc-wrapper">
+                <div class="sun-arc"></div>
+                <!-- Sole -->
+                <div class="sun-indicator" id="sun-indicator"></div>
+                <!-- Luna -->
+                <div class="moon-indicator" id="moon-indicator"></div>
+              </div>
+              <!-- Orari orizzontali: sole esterno, luna interno -->
+              <div class="celestial-times">
+                <span>🌅 <span class="time-label" id="sunrise-time">--:--</span></span>
+                <span>🌔 <span class="time-label" id="moonrise-time">--:--</span></span>
+                <span>🌖 <span class="time-label" id="moonset-time">--:--</span></span>
+                <span>🌇 <span class="time-label" id="sunset-time">--:--</span></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TEMPERATURA -->
+      <div class="panel panel-temp">
+        <div class="panel-header">
+          <span class="panel-title">Temperatura ESP32</span>
+          <span class="panel-subtitle" id="temp-minmax">--</span>
+        </div>
+        <div id="chart-temp" class="chart-kiosk"></div>
+      </div>
+
+      <!-- UMIDITÀ -->
+      <div class="panel panel-hum">
+        <div class="panel-header">
+          <span class="panel-title">Umidità ESP32</span>
+          <span class="panel-subtitle" id="hum-minmax">--</span>
+        </div>
+        <div id="chart-hum" class="chart-kiosk"></div>
+      </div>
+    </div>
+
+    <!-- META -->
+    <div class="meta-row">
+      <span>Ultimo dato: <span id="stat-last-ts">--</span> | Punti totali: <span id="stat-total-points">0</span></span>
+      <span>Temp CPU: <span id="stat-temp-cpu">-- °C</span></span>
+    </div>
+
+    <!-- FOOTER -->
+    <div class="footer-bar">
+      <div class="footer-left">
+        <div class="footer-title">Meteo kiosk</div>
+        <div class="status-line" id="status-bar">
+          Caricamento dati da ThingSpeak…
+        </div>
+      </div>
+      <div class="footer-center">
+        <button class="btn-range" data-range="1h">1h</button>
+        <button class="btn-range" data-range="3h">3h</button>
+        <button class="btn-range" data-range="6h">6h</button>
+        <button class="btn-range" data-range="12h">12h</button>
+        <button class="btn-range" data-range="1d">1d</button>
+        <button class="btn-range" data-range="1w">1w</button>
+        <button class="btn-range" data-range="1m">1m</button>
+        <button class="btn-range" data-range="1y">1y</button>
+      </div>
+      <div class="footer-right">
+		<button class="btn-small" type="button" onclick="window.location.href='confronto.html'">
+		Confronto ➜
+		</button>
+		<button class="btn-small" type="button" onclick="window.location.href='dati.html'">
+		Dati ➜
+		</button>
+		</div>
+
+    </div>
+  </div>
+
+  <script src="main.js"></script>
+</body>
+</html>

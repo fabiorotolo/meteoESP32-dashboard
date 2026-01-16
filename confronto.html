@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <title>ESP32 Meteo - Confronto Giorni</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- SunCalc per calcoli astronomici -->
+  <script src="https://cdn.jsdelivr.net/npm/suncalc@1.9.0/suncalc.js"></script>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+
+  <style>
+:root {
+  /* PALETTE GRIGIO SCURO */
+  --bg-main: #1d1f26;
+  --bg-panel: #262932;
+  --bg-panel-soft: #2c2f39;
+  --bg-top-tile: #2b2e38;
+  --border-panel: #3a3d4a;
+
+  /* ACCENTI */
+  --accent: #3d7cff;
+  --accent-soft: #2f4f80;
+
+  /* TESTO */
+  --text-main: #f4f4f7;
+  --text-soft: #c5c7d1;
+  --text-muted: #9396a3;
+
+  /* ALLERTA */
+  --danger: #ff5c5c;
+  
+  /* COLORI GIORNI */
+  --day-1: #3d7cff;  /* Blu - oggi */
+  --day-2: #ff5c5c;  /* Rosso - ieri */
+  --day-3: #4ade80;  /* Verde */
+  --day-4: #fb923c;  /* Arancione */
+  --day-5: #a855f7;  /* Viola */
+  --day-6: #06b6d4;  /* Ciano */
+  --day-7: #fbbf24;  /* Giallo */
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: radial-gradient(circle at top, #20284a 0, #05070d 50%);
+  color: var(--text-main);
+  min-height: 100vh;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.kiosk-root {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 12px;
+  min-height: 100vh;
+}
+
+/* TOP BAR DESKTOP (4 colonne) */
+.top-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  min-height: 70px;
+}
+
+.top-tile {
+  background: var(--bg-top-tile);
+  border-radius: 10px;
+  border: 1px solid #242b3d;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.6),
+    0 4px 6px rgba(0, 0, 0, 0.7);
+}
+
+.top-label-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+  margin-bottom: 3px;
+}
+
+.top-label-unit {
+  opacity: 0.8;
+  font-weight: 600;
+}
+
+.top-value {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.top-timer {
+  text-align: center;
+}
+
+/* classi per grid-area mobile */
+.tile-press    {}
+.tile-temp-int {}
+.tile-clock    {}
+.tile-temp-ext {}
+.tile-hum-ext  {}
+
+/* GRIGLIA CENTRALE 2x2 DESKTOP */
+.center-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: 1fr 1fr;
+  gap: 8px;
+  min-height: 0;
+}
+
+.panel {
+  background: var(--bg-panel);
+  border-radius: 10px;
+  border: 1px solid var(--border-panel);
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  box-shadow: 0 6px 10px rgba(0, 0, 0, 0.6);
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-soft);
+  margin-bottom: 4px;
+}
+
+.panel-title {
+  font-weight: 600;
+}
+
+.panel-subtitle {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.chart-kiosk {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Forecast / debug */
+.sun-content {
+  flex: 1;
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.forecast-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+}
+
+.forecast-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+}
+
+.forecast-text-main {
+  font-weight: 600;
+}
+
+.sun-debug {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--text-soft);
+  margin-top: 4px;
+}
+
+.sun-debug span span {
+  font-family: "JetBrains Mono", Menlo, monospace;
+  color: var(--text-main);
+}
+
+.slot-title {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 11px;
+  color: var(--text-soft);
+  margin-bottom: 4px;
+}
+
+/* FASE LUNARE E SOLE */
+.astro-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.moon-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+}
+
+.moon-icon {
+  font-size: 32px;
+  line-height: 1;
+}
+
+.moon-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.moon-phase-name {
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.moon-illumination {
+  font-size: 12px;
+  color: var(--text-soft);
+}
+
+.sun-arc-container {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sun-arc-wrapper {
+  position: relative;
+  height: 60px;
+  margin: 0 10px;
+}
+
+.sun-arc {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 50px;
+  border-radius: 100px 100px 0 0;
+  background: linear-gradient(
+    90deg,
+    #ff6b6b 0%,
+    #ffd93d 20%,
+    #fcf876 40%,
+    #a8e6cf 60%,
+    #6bcbef 80%,
+    #9381ff 100%
+  );
+  opacity: 0.6;
+}
+
+/* SOLE - EMOJI */
+.sun-indicator {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  transform: translateX(-50%);
+  transition: all 0.3s ease;
+  z-index: 2;
+  font-size: 28px;
+  line-height: 1;
+  text-align: center;
+  filter: drop-shadow(0 0 12px rgba(255, 200, 0, 0.9));
+}
+
+.sun-indicator::before {
+  content: "☀️";
+}
+
+/* LUNA */
+.moon-indicator {
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: 
+    radial-gradient(circle at 38% 32%, 
+      #ececf2 0%,
+      #d8d8e2 30%,
+      #c0c0d0 60%,
+      #a8a8b8 100%
+    );
+  transform: translateX(-50%);
+  transition: all 0.3s ease;
+  z-index: 1;
+  box-shadow:
+    0 0 14px rgba(220, 220, 235, 0.7),
+    0 0 8px rgba(230, 230, 245, 0.5),
+    inset -3px -3px 6px rgba(0, 0, 0, 0.12);
+}
+
+.moon-indicator::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background-image: 
+    radial-gradient(circle 3px at 40% 22%, rgba(140, 140, 160, 0.45) 30%, transparent 70%),
+    radial-gradient(ellipse 8px 6px at 45% 55%, rgba(155, 155, 175, 0.28) 40%, transparent 80%),
+    radial-gradient(circle 4px at 28% 45%, rgba(145, 145, 165, 0.38) 35%, transparent 75%),
+    radial-gradient(circle 2.5px at 65% 30%, rgba(150, 150, 170, 0.35) 40%, transparent 80%);
+}
+
+.moon-indicator::after {
+  content: "";
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: rgba(130, 130, 150, 0.35);
+  top: 38%;
+  left: 58%;
+  box-shadow:
+    -8px 8px 0 0 rgba(130, 130, 150, 0.35),
+    10px -6px 0 0 rgba(130, 130, 150, 0.3),
+    -12px -4px 0 0 rgba(130, 130, 150, 0.28);
+}
+
+.celestial-times {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-soft);
+  padding: 0 10px;
+  gap: 6px;
+}
+
+.celestial-times span {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.time-label {
+  font-family: "JetBrains Mono", Menlo, monospace;
+  font-weight: 600;
+  color: var(--text-main);
+  font-size: 10px;
+}
+
+/* META ROW */
+.meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: var(--text-soft);
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  margin: 0 2px;
+}
+
+.meta-row span span {
+  font-family: "JetBrains Mono", Menlo, monospace;
+  color: var(--text-main);
+  font-weight: 600;
+}
+
+/* FOOTER BAR */
+.footer-bar {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 10px;
+  background: var(--bg-panel);
+  border-radius: 10px;
+  border: 1px solid var(--border-panel);
+  min-height: 44px;
+  margin-top: 4px;
+}
+
+.footer-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.footer-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-main);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.status-line {
+  font-size: 11px;
+  color: var(--text-soft);
+}
+
+.footer-center {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.footer-right {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* BOTTONI */
+.btn-range {
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid #2b3144;
+  background: #141927;
+  color: var(--text-soft);
+  cursor: pointer;
+  font-size: 12px;
+  min-width: 40px;
+  text-align: center;
+  transition: all 0.15s;
+  font-weight: 600;
+}
+
+.btn-range:hover {
+  background: #1d2337;
+  border-color: #353b52;
+}
+
+.btn-range.active {
+  border-color: var(--btn-color, var(--accent));
+  background: var(--btn-color, var(--accent));
+  color: #ffffff;
+  box-shadow: 0 0 8px var(--btn-color, rgba(45, 140, 255, 0.6));
+}
+
+/* Colori specifici per ogni pulsante giorno */
+.btn-day-1.active { --btn-color: var(--day-1); }
+.btn-day-2.active { --btn-color: var(--day-2); }
+.btn-day-3.active { --btn-color: var(--day-3); }
+.btn-day-4.active { --btn-color: var(--day-4); }
+.btn-day-5.active { --btn-color: var(--day-5); }
+.btn-day-6.active { --btn-color: var(--day-6); }
+.btn-day-7.active { --btn-color: var(--day-7); }
+
+.btn-small {
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid #2b3144;
+  background: #141927;
+  color: var(--text-soft);
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.15s;
+  font-weight: 600;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-small:hover {
+  background: #1d2337;
+  border-color: #353b52;
+  color: var(--text-main);
+}
+
+.btn-sensor {
+  padding: 6px 16px;
+  border-radius: 999px;
+  border: 2px solid #3a3d4a;
+  background: #1d2337;
+  color: var(--text-soft);
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.15s;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.btn-sensor:hover {
+  border-color: #4a4d5a;
+  color: var(--text-main);
+}
+
+/* INT attivo = ROSSO */
+.btn-sensor-int.active {
+  border-color: #ff5c5c;
+  background: #ff5c5c;
+  color: #ffffff;
+  box-shadow: 0 0 12px rgba(255, 92, 92, 0.6);
+}
+
+/* EXT attivo = BLU */
+.btn-sensor-ext.active {
+  border-color: #3d7cff;
+  background: #3d7cff;
+  color: #ffffff;
+  box-shadow: 0 0 12px rgba(61, 124, 255, 0.6);
+}
+
+/* RESPONSIVE */
+@media screen and (max-width: 1100px) {
+  .footer-bar {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto;
+    gap: 8px;
+  }
+
+  .footer-center {
+    order: 2;
+  }
+
+  .footer-right {
+    order: 3;
+    justify-content: center;
+  }
+}
+
+/* MOBILE - Pulsanti più compatti */
+@media screen and (max-width: 500px) {
+  .btn-range {
+    padding: 4px 8px !important;
+    font-size: 11px !important;
+    min-width: 35px !important;
+  }
+  
+  .footer-center {
+    gap: 3px !important;
+  }
+  
+  .btn-sensor {
+    padding: 5px 12px !important;
+    font-size: 12px !important;
+  }
+  
+  .btn-small {
+    padding: 5px 10px !important;
+    font-size: 11px !important;
+  }
+  
+  .footer-right {
+    gap: 6px !important;
+  }
+}
+
+@media screen and (max-width: 850px) {
+  .top-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: auto auto;
+  }
+
+  .top-value {
+    font-size: 18px;
+  }
+
+  .top-label-row {
+    font-size: 10px;
+  }
+}
+
+@media screen and (max-width: 650px) {
+  .center-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+  }
+
+  .panel {
+    min-height: 300px;
+  }
+}
+
+/* SMARTPHONE VERTICALE */
+@media screen and (orientation: portrait) and (max-width: 650px) {
+  body {
+    overflow-y: auto !important;
+    height: auto !important;
+  }
+
+  .kiosk-root {
+    height: auto !important;
+    min-height: 100vh !important;
+    padding: 8px !important;
+    gap: 8px !important;
+  }
+
+  .top-row {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    grid-template-rows: auto auto auto !important;
+    grid-template-areas:
+      "clock clock"
+      "press temp-int"
+      "hum-ext temp-ext";
+    gap: 6px !important;
+    min-height: auto !important;
+  }
+
+  .tile-clock {
+    grid-area: clock;
+    text-align: center;
+  }
+
+  .tile-press    { grid-area: press; }
+  .tile-temp-int { grid-area: temp-int; }
+  .tile-hum-ext  { grid-area: hum-ext; }
+  .tile-temp-ext { grid-area: temp-ext; }
+
+  .center-grid {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+    flex: 0 0 auto !important;
+  }
+
+  .panel-meteo {
+    order: 1 !important;
+  }
+  
+  .panel-press {
+    order: 2 !important;
+  }
+  
+  .panel-temp {
+    order: 3 !important;
+  }
+  
+  .panel-hum {
+    order: 4 !important;
+  }
+
+  .panel {
+    flex: 0 0 auto !important;
+    padding: 8px 10px !important;
+  }
+
+  .chart-kiosk {
+    flex: 0 0 260px !important;
+    height: 260px !important;
+    min-height: 260px !important;
+    width: 100% !important;
+  }
+}
+  </style>
+</head>
+
+<body>
+  <div class="kiosk-root">
+    <!-- TOP BAR -->
+    <div class="top-row">
+      <div class="top-tile tile-press">
+        <div class="top-label-row">
+          <span>Pressione</span>
+          <span class="top-label-unit">ESP32</span>
+        </div>
+        <div class="top-value" id="stat-press">-- hPa</div>
+      </div>
+
+      <div class="top-tile top-timer tile-clock">
+        <div class="top-label-row">
+          <span>Ora locale</span>
+        </div>
+        <div class="top-value" id="clock-time">--:--:--</div>
+      </div>
+
+      <div class="top-tile tile-temp-ext">
+        <div class="top-label-row">
+          <span>Temperatura</span>
+          <span class="top-label-unit">ESP32</span>
+        </div>
+        <div class="top-value" id="stat-temp-ext">-- °C</div>
+      </div>
+
+      <div class="top-tile tile-hum-ext">
+        <div class="top-label-row">
+          <span>Umidità</span>
+          <span class="top-label-unit">ESP32</span>
+        </div>
+        <div class="top-value" id="stat-hum-ext">-- %</div>
+      </div>
+    </div>
+
+    <!-- GRIGLIA CENTRALE 2x2 -->
+    <div class="center-grid">
+      <!-- PRESSIONE -->
+      <div class="panel panel-press">
+        <div class="panel-header">
+          <span class="panel-title">Pressione - Confronto</span>
+          <span class="panel-subtitle" id="press-subtitle">--</span>
+        </div>
+        <div id="chart-press" class="chart-kiosk"></div>
+      </div>
+
+      <!-- TENDENZA METEO -->
+      <div class="panel panel-meteo">
+        <div class="panel-header">
+          <span class="panel-title">Tendenza meteo (6h)</span>
+          <span class="panel-subtitle">ΔP 3h, UR, regole</span>
+        </div>
+        <div class="sun-content">
+          <div class="forecast-row">
+            <div class="forecast-icon" id="forecast-icon">ℹ️</div>
+            <div>
+              <div class="forecast-text-main" id="forecast-text">
+                Caricamento dati da ThingSpeak…
+              </div>
+            </div>
+          </div>
+          <div class="sun-debug">
+            <span>ΔP 3h: <span id="debug-dp3h">n/d</span></span>
+            <span>Umidità interna: <span id="debug-rh">n/d</span></span>
+            <span>Soglie: <span id="debug-thresh"></span></span>
+          </div>
+
+          <!-- FASE LUNARE E POSIZIONE SOLE -->
+          <div class="astro-info">
+            <div class="moon-row">
+              <div class="moon-icon" id="moon-icon">🌙</div>
+              <div class="moon-details">
+                <div class="moon-phase-name" id="moon-phase">Luna</div>
+                <div class="moon-illumination" id="moon-illumination">Caricamento...</div>
+              </div>
+            </div>
+
+            <div class="sun-arc-container">
+              <div class="sun-arc-wrapper">
+                <div class="sun-arc"></div>
+                <div class="sun-indicator" id="sun-indicator"></div>
+                <div class="moon-indicator" id="moon-indicator"></div>
+              </div>
+              <div class="celestial-times">
+                <span>🌅 <span class="time-label" id="sunrise-time">--:--</span></span>
+                <span>🌔 <span class="time-label" id="moonrise-time">--:--</span></span>
+                <span>🌖 <span class="time-label" id="moonset-time">--:--</span></span>
+                <span>🌇 <span class="time-label" id="sunset-time">--:--</span></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TEMPERATURA -->
+      <div class="panel panel-temp">
+        <div class="panel-header">
+          <span class="panel-title" id="temp-title">Temperatura INT - Confronto</span>
+          <span class="panel-subtitle" id="temp-subtitle">--</span>
+        </div>
+        <div id="chart-temp" class="chart-kiosk"></div>
+      </div>
+
+      <!-- UMIDITÀ -->
+      <div class="panel panel-hum">
+        <div class="panel-header">
+          <span class="panel-title" id="hum-title">Umidità INT - Confronto</span>
+          <span class="panel-subtitle" id="hum-subtitle">--</span>
+        </div>
+        <div id="chart-hum" class="chart-kiosk"></div>
+      </div>
+    </div>
+
+    <!-- META -->
+    <div class="meta-row">
+      <span>Ultimo dato: <span id="stat-last-ts">--</span> | Punti totali: <span id="stat-total-points">0</span></span>
+      <span>Temp CPU: <span id="stat-temp-cpu">-- °C</span></span>
+    </div>
+
+    <!-- FOOTER -->
+    <div class="footer-bar">
+      <div class="footer-left">
+        <div class="footer-title">Confronto Giorni</div>
+        <div class="status-line" id="status-bar">
+          Caricamento dati da ThingSpeak…
+        </div>
+      </div>
+      <div class="footer-center">
+        <button class="btn-range btn-day-1" data-days="1">1gg</button>
+        <button class="btn-range btn-day-2" data-days="2">2gg</button>
+        <button class="btn-range btn-day-3" data-days="3">3gg</button>
+        <button class="btn-range btn-day-4" data-days="4">4gg</button>
+        <button class="btn-range btn-day-5" data-days="5">5gg</button>
+        <button class="btn-range btn-day-6" data-days="6">6gg</button>
+        <button class="btn-range btn-day-7" data-days="7">7gg</button>
+      </div>
+      <div class="footer-right">
+        <!-- Pulsanti INT/EXT rimossi - solo ESP32 -->
+        <button class="btn-small" type="button" onclick="window.location.href='index.html'">
+          ← Vista normale
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="confronto.js"></script>
+</body>
+</html>

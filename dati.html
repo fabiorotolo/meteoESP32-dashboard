@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <title>Meteo – Tabella dati</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <style>
+    :root {
+      --bg-main: #1d1f26;
+      --bg-panel: #262932;
+      --bg-panel-soft: #2c2f39;
+      --border-panel: #3a3d4a;
+      --accent: #3d7cff;
+      --accent-soft: #2f4f80;
+      --text-main: #f4f4f7;
+      --text-soft: #c5c7d1;
+      --text-muted: #9396a3;
+      --danger: #ff5c5c;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: radial-gradient(circle at top, #20284a 0, #05070d 50%);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 16px;
+    }
+
+    .page {
+      width: 100%;
+      max-width: 1100px;
+      background: var(--bg-main);
+      border-radius: 12px;
+      border: 1px solid #242b3d;
+      box-shadow:
+        0 0 0 1px rgba(0, 0, 0, 0.6),
+        0 8px 20px rgba(0, 0, 0, 0.8);
+      padding: 12px 16px 16px;
+    }
+
+    .page-header {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .title-block {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .title-block h1 {
+      font-size: 20px;
+      margin: 0;
+    }
+
+    .title-block span {
+      font-size: 12px;
+      color: var(--text-soft);
+    }
+
+    .range-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+
+    .btn-range {
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid #2b3144;
+      background: #141927;
+      color: var(--text-soft);
+      cursor: pointer;
+      font-size: 11px;
+      min-width: 36px;
+      text-align: center;
+      transition: background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s;
+    }
+
+    .btn-range.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #ffffff;
+      box-shadow: 0 0 6px rgba(45, 140, 255, 0.9);
+    }
+
+    .info-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 16px;
+      font-size: 12px;
+      color: var(--text-soft);
+      margin-bottom: 10px;
+      border-top: 1px solid var(--border-panel);
+      border-bottom: 1px solid var(--border-panel);
+      padding: 6px 0;
+    }
+
+    .info-bar span strong {
+      color: var(--text-main);
+      font-family: "JetBrains Mono", Menlo, monospace;
+    }
+
+    .status {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    .status.error {
+      color: var(--danger);
+    }
+
+    .table-wrapper {
+      max-height: 65vh;
+      overflow: auto;
+      border-radius: 10px;
+      border: 1px solid var(--border-panel);
+      background: var(--bg-panel);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      min-width: 700px;
+    }
+
+    thead {
+      position: sticky;
+      top: 0;
+      background: #2b2f3a;
+      z-index: 1;
+    }
+
+    th, td {
+      padding: 6px 8px;
+      text-align: right;
+      border-bottom: 1px solid #343949;
+      white-space: nowrap;
+    }
+
+    th:first-child,
+    td:first-child {
+      text-align: left;
+    }
+
+    th {
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-soft);
+    }
+
+    tbody tr:nth-child(even) {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    tbody tr:hover {
+      background: rgba(61, 124, 255, 0.13);
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .tag-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: var(--accent);
+    }
+
+    /* HEADER CON ICONA FILTRO */
+    .th-filter {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 4px;
+    }
+
+    .filter-btn {
+      border: 1px solid #41475b;
+      background: #1b1f2b;
+      border-radius: 4px;
+      width: 18px;
+      height: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 11px;
+      padding: 0;
+      color: var(--text-soft);
+    }
+
+    .filter-btn.active {
+      border-color: var(--accent);
+      background: #223152;
+      color: #ffffff;
+      box-shadow: 0 0 0 1px rgba(61, 124, 255, 0.6);
+    }
+
+    .filter-btn span {
+      transform: translateY(0.5px);
+    }
+
+    /* POPUP FILTRO TIPO EXCEL */
+    .filter-popup {
+      position: fixed;
+      min-width: 200px;
+      max-height: 260px;
+      background: var(--bg-panel-soft);
+      border-radius: 8px;
+      border: 1px solid var(--border-panel);
+      box-shadow:
+        0 8px 18px rgba(0, 0, 0, 0.8),
+        0 0 0 1px rgba(0, 0, 0, 0.7);
+      display: none;
+      flex-direction: column;
+      font-size: 12px;
+      z-index: 9999;
+      overflow: hidden;
+    }
+
+    .filter-popup-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--border-panel);
+      background: #222632;
+    }
+
+    .filter-popup-title {
+      font-weight: 600;
+      color: var(--text-soft);
+    }
+
+    .filter-popup-close {
+      border: none;
+      background: transparent;
+      color: var(--text-soft);
+      cursor: pointer;
+      font-size: 13px;
+      padding: 0 4px;
+    }
+
+    .filter-popup-actions {
+      display: flex;
+      gap: 4px;
+      padding: 4px 8px;
+      border-bottom: 1px solid var(--border-panel);
+    }
+
+    .filter-chip {
+      padding: 2px 6px;
+      border-radius: 999px;
+      border: 1px solid #40465a;
+      background: #161a26;
+      cursor: pointer;
+      font-size: 11px;
+      color: var(--text-soft);
+    }
+
+    .filter-popup-list {
+      padding: 4px 8px;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .filter-popup-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 0;
+    }
+
+    .filter-popup-item label {
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      width: 100%;
+    }
+
+    .filter-popup-item input[type="checkbox"] {
+      cursor: pointer;
+    }
+
+    .filter-popup-footer {
+      padding: 6px 8px;
+      border-top: 1px solid var(--border-panel);
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    .filter-apply {
+      padding: 3px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--accent);
+      background: var(--accent);
+      color: #ffffff;
+      font-size: 11px;
+      cursor: pointer;
+    }
+
+    .filter-value-text {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    @media (max-width: 700px) {
+      .page {
+        padding: 10px;
+      }
+      .title-block h1 {
+        font-size: 18px;
+      }
+      table {
+        font-size: 11px;
+      }
+      th, td {
+        padding: 5px 6px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="page">
+    <div class="page-header">
+      <div class="title-block">
+        <h1>Meteo – Dati grezzi</h1>
+        <span>Tabella dati da ThingSpeak (INT + EXT) con filtro temporale e filtri tipo Excel</span>
+      </div>
+      <div class="range-buttons">
+        <button class="btn-range" data-range="1h">1h</button>
+        <button class="btn-range" data-range="3h">3h</button>
+        <button class="btn-range" data-range="6h">6h</button>
+        <button class="btn-range" data-range="12h">12h</button>
+        <button class="btn-range" data-range="1d">1d</button>
+        <button class="btn-range" data-range="1w">1w</button>
+        <button class="btn-range" data-range="1m">1m</button>
+        <button class="btn-range" data-range="1y">1y</button>
+      </div>
+    </div>
+
+    <div class="info-bar">
+      <span>Ultimo dato: <strong id="info-last-ts">--</strong></span>
+      <span>Punti INT: <strong id="info-int-count">0</strong></span>
+      <span>Punti EXT: <strong id="info-ext-count">0</strong></span>
+      <span>Intervallo: <strong id="info-range">--</strong></span>
+      <span class="tag">
+        <span class="tag-dot"></span>
+        <span id="info-source">ThingSpeak live</span>
+      </span>
+    </div>
+
+    <div id="status" class="status">Seleziona un intervallo per caricare i dati…</div>
+
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>
+              <div class="th-filter">
+                <span>Timestamp</span>
+                <button class="filter-btn" data-col="0" title="Filtro Timestamp">
+                  <span>⇵</span>
+                </button>
+              </div>
+            </th>
+            <th>
+              <div class="th-filter">
+                <span>Temp INT (°C)</span>
+                <button class="filter-btn" data-col="1" title="Filtro Temp INT">
+                  <span>⇵</span>
+                </button>
+              </div>
+            </th>
+            <th>
+              <div class="th-filter">
+                <span>UR INT (%)</span>
+                <button class="filter-btn" data-col="2" title="Filtro UR INT">
+                  <span>⇵</span>
+                </button>
+              </div>
+            </th>
+            <th>
+              <div class="th-filter">
+                <span>Press (hPa)</span>
+                <button class="filter-btn" data-col="3" title="Filtro Pressione">
+                  <span>⇵</span>
+                </button>
+              </div>
+            </th>
+            <th>
+              <div class="th-filter">
+                <span>CPU (°C)</span>
+                <button class="filter-btn" data-col="4" title="Filtro CPU">
+                  <span>⇵</span>
+                </button>
+              </div>
+            </th>
+            <th>
+              <div class="th-filter">
+                <span>Temp EXT (°C)</span>
+                <button class="filter-btn" data-col="5" title="Filtro Temp EXT">
+                  <span>⇵</span>
+                </button>
+              </div>
+            </th>
+            <th>
+              <div class="th-filter">
+                <span>UR EXT (%)</span>
+                <button class="filter-btn" data-col="6" title="Filtro UR EXT">
+                  <span>⇵</span>
+                </button>
+              </div>
+            </th>
+          </tr>
+        </thead>
+        <tbody id="data-body">
+          <!-- righe inserite via JS -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- POPUP FILTRO RIUTILIZZATO PER TUTTE LE COLONNE -->
+  <div id="filter-popup" class="filter-popup">
+    <div class="filter-popup-header">
+      <span id="filter-popup-title" class="filter-popup-title">Filtro</span>
+      <button id="filter-popup-close" class="filter-popup-close" type="button">✕</button>
+    </div>
+    <div class="filter-popup-actions">
+      <button type="button" id="filter-select-all" class="filter-chip">Tutti</button>
+      <button type="button" id="filter-select-none" class="filter-chip">Nessuno</button>
+    </div>
+    <div id="filter-popup-list" class="filter-popup-list"></div>
+    <div class="filter-popup-footer">
+      <button type="button" id="filter-apply" class="filter-apply">Applica</button>
+    </div>
+  </div>
+
+  <script>
+    // ========================
+    // CONFIG THINGSPEAK
+    // ========================
+
+    const INTERNAL_CHANNEL_ID = 3152991;               // meteo_data
+    const INTERNAL_READ_KEY   = "3I7MYYDZS4IKL3YJ";
+    const INTERNAL_FIELDS = {
+      temp: 4,
+      hum: 2,
+      press: 3,
+      cpu: 5
+    };
+
+    const EXTERNAL_CHANNEL_ID = 3181129;               // ESP32_01
+    const EXTERNAL_READ_KEY   = "7JYH3JOONPFPNQNE";
+    const EXTERNAL_FIELDS = {
+      hum: 1,
+      temp: 2
+    };
+
+    const RANGE_HOURS = {
+      "1h": 1,
+      "3h": 3,
+      "6h": 6,
+      "12h": 12,
+      "1d": 24,
+      "1w": 24 * 7,
+      "1m": 24 * 30,
+      "1y": 24 * 365
+    };
+
+    let currentRange = "1d";
+
+    // tutte le righe dell'intervallo corrente
+    let allRows = [];
+    // filtri per colonna: colIndex -> Set di valori selezionati (stringhe come in tabella)
+    const columnFilters = {};
+
+    // popup stato
+    let currentFilterCol = null;
+    let popupValues = []; // valori distinti colonna corrente
+
+    // ========================
+    // UTILITÀ BASE
+    // ========================
+
+    function fmtTime(date) {
+      const h = String(date.getHours()).padStart(2, "0");
+      const m = String(date.getMinutes()).padStart(2, "0");
+      const s = String(date.getSeconds()).padStart(2, "0");
+      return `${h}:${m}:${s}`;
+    }
+
+    function fmtDateTime(date) {
+      const d = String(date.getDate()).padStart(2, "0");
+      const mo = String(date.getMonth() + 1).padStart(2, "0");
+      const y = date.getFullYear();
+      return `${d}/${mo}/${y} ${fmtTime(date)}`;
+    }
+
+    async function fetchChannelFeeds(channelId, apiKey, maxResults = 2000) {
+      const url =
+        `https://api.thingspeak.com/channels/${channelId}/feeds.json` +
+        `?api_key=${apiKey}&results=${maxResults}`;
+
+      const res = await fetch(url);
+      if (!res.ok) {
+        throw new Error("Errore HTTP " + res.status);
+      }
+      const data = await res.json();
+      return (data.feeds || []).map(f => ({
+        time: new Date(f.created_at),
+        raw: f
+      }));
+    }
+
+    function filterByRange(feeds, hours) {
+      if (!feeds.length) return [];
+      const now = new Date();
+      const cutoff = new Date(now.getTime() - hours * 3600 * 1000);
+      return feeds.filter(f => f.time >= cutoff);
+    }
+
+    // ========================
+    // FILTRI TIPO EXCEL
+    // ========================
+
+    function rowMatchesFilters(row) {
+      // se nessun filtro attivo -> tutto passa
+      const cols = Object.keys(columnFilters);
+      if (!cols.length) return true;
+
+      for (const colStr of cols) {
+        const col = Number(colStr);
+        const activeSet = columnFilters[col];
+        if (!activeSet || !activeSet.size) continue; // nessun filtro concreto
+
+        const cellValue = row.display[col] || "";
+        if (!activeSet.has(cellValue)) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    function renderRows(rows) {
+      const bodyEl = document.getElementById("data-body");
+      bodyEl.innerHTML = "";
+      const frag = document.createDocumentFragment();
+
+      // le più recenti in alto
+      rows.slice().reverse().forEach(r => {
+        const tr = document.createElement("tr");
+        r.display.forEach((val, idx) => {
+          const td = document.createElement("td");
+          td.textContent = val;
+          tr.appendChild(td);
+        });
+        frag.appendChild(tr);
+      });
+
+      bodyEl.appendChild(frag);
+    }
+
+    function applyFiltersAndRender() {
+      const filtered = allRows.filter(rowMatchesFilters);
+      renderRows(filtered);
+
+      const statusEl = document.getElementById("status");
+      statusEl.textContent =
+        `Intervallo ${currentRange}: ${filtered.length} righe mostrate (filtrate) su ${allRows.length} righe totali.`;
+    }
+
+    function openFilterPopupForColumn(colIndex, headerLabel, buttonElement) {
+      currentFilterCol = colIndex;
+
+      const popup = document.getElementById("filter-popup");
+      const titleEl = document.getElementById("filter-popup-title");
+      const listEl = document.getElementById("filter-popup-list");
+
+      titleEl.textContent = headerLabel;
+      listEl.innerHTML = "";
+
+      // raccogli valori distinti come appaiono in tabella
+      const valueSet = new Set();
+      allRows.forEach(r => {
+        valueSet.add(r.display[colIndex]);
+      });
+
+      popupValues = Array.from(valueSet);
+      popupValues.sort((a, b) => {
+        // prova a ordinare numerico se possibile
+        const na = parseFloat(a.replace(",", "."));
+        const nb = parseFloat(b.replace(",", "."));
+        if (!isNaN(na) && !isNaN(nb)) {
+          return na - nb;
+        }
+        // fallback alfabetico
+        return a.localeCompare(b);
+      });
+
+      const activeSet = columnFilters[colIndex] || new Set(popupValues);
+
+      popupValues.forEach(val => {
+        const item = document.createElement("div");
+        item.className = "filter-popup-item";
+
+        const label = document.createElement("label");
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.value = val;
+        checkbox.checked = activeSet.has(val);
+
+        const span = document.createElement("span");
+        span.className = "filter-value-text";
+        span.textContent = val === "--" ? "(vuoto)" : val;
+
+        label.appendChild(checkbox);
+        label.appendChild(span);
+        item.appendChild(label);
+        listEl.appendChild(item);
+      });
+
+      // posizionamento: sotto al bottone
+      const rect = buttonElement.getBoundingClientRect();
+      const popupWidth = 220;
+      const margin = 4;
+
+      let left = rect.left;
+      if (left + popupWidth > window.innerWidth - 8) {
+        left = window.innerWidth - popupWidth - 8;
+      }
+      let top = rect.bottom + margin;
+      if (top + 260 > window.innerHeight) {
+        top = rect.top - 260 - margin;
+      }
+
+      popup.style.left = left + "px";
+      popup.style.top = top + "px";
+      popup.style.display = "flex";
+
+      // segna il bottone come attivo (solo visivamente)
+      document.querySelectorAll(".filter-btn").forEach(btn => {
+        btn.classList.toggle("active", btn === buttonElement);
+      });
+    }
+
+    function closeFilterPopup() {
+      const popup = document.getElementById("filter-popup");
+      popup.style.display = "none";
+      currentFilterCol = null;
+      popupValues = [];
+      document.querySelectorAll(".filter-btn").forEach(btn => {
+        btn.classList.remove("active");
+      });
+    }
+
+    function setupFilterPopupEvents() {
+      const popup = document.getElementById("filter-popup");
+      const closeBtn = document.getElementById("filter-popup-close");
+      const btnAll = document.getElementById("filter-select-all");
+      const btnNone = document.getElementById("filter-select-none");
+      const btnApply = document.getElementById("filter-apply");
+
+      closeBtn.addEventListener("click", () => {
+        closeFilterPopup();
+      });
+
+      btnAll.addEventListener("click", () => {
+        const checkboxes = popup.querySelectorAll("input[type='checkbox']");
+        checkboxes.forEach(cb => cb.checked = true);
+      });
+
+      btnNone.addEventListener("click", () => {
+        const checkboxes = popup.querySelectorAll("input[type='checkbox']");
+        checkboxes.forEach(cb => cb.checked = false);
+      });
+
+      btnApply.addEventListener("click", () => {
+        if (currentFilterCol == null) {
+          closeFilterPopup();
+          return;
+        }
+        const checkboxes = popup.querySelectorAll("input[type='checkbox']");
+        const selected = new Set();
+        checkboxes.forEach(cb => {
+          if (cb.checked) {
+            selected.add(cb.value);
+          }
+        });
+
+        // se tutti selezionati o nessuno -> nessun filtro concreto (come Excel)
+        if (selected.size === 0 || selected.size === popupValues.length) {
+          delete columnFilters[currentFilterCol];
+        } else {
+          columnFilters[currentFilterCol] = selected;
+        }
+
+        applyFiltersAndRender();
+        closeFilterPopup();
+      });
+
+      // chiusura cliccando fuori dal popup
+      document.addEventListener("click", (e) => {
+        const isPopup = popup.contains(e.target);
+        const isFilterBtn = e.target.closest && e.target.closest(".filter-btn");
+        if (!isPopup && !isFilterBtn && popup.style.display === "flex") {
+          closeFilterPopup();
+        }
+      });
+    }
+
+    function setupHeaderFilterButtons() {
+      const buttons = document.querySelectorAll(".filter-btn");
+      buttons.forEach(btn => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const col = Number(btn.dataset.col);
+          const headerLabel = btn.parentElement.querySelector("span").textContent.trim();
+          const popup = document.getElementById("filter-popup");
+          if (popup.style.display === "flex" && currentFilterCol === col) {
+            // se clicchi di nuovo sulla stessa colonna, chiudo
+            closeFilterPopup();
+          } else {
+            openFilterPopupForColumn(col, headerLabel, btn);
+          }
+        });
+      });
+    }
+
+    // ========================
+    // CARICAMENTO DATI
+    // ========================
+
+    async function loadAndRenderTable() {
+      const statusEl = document.getElementById("status");
+      const infoLastTs = document.getElementById("info-last-ts");
+      const infoIntCount = document.getElementById("info-int-count");
+      const infoExtCount = document.getElementById("info-ext-count");
+      const infoRange = document.getElementById("info-range");
+
+      statusEl.textContent = "Caricamento dati da ThingSpeak…";
+      statusEl.classList.remove("error");
+
+      try {
+        const hours = RANGE_HOURS[currentRange] || 24;
+
+        const maxResults =
+          currentRange === "1y" ? 8000 :
+          currentRange === "1m" ? 5000 :
+          currentRange === "1w" ? 3000 : 2000;
+
+        const [intFeeds, extFeeds] = await Promise.all([
+          fetchChannelFeeds(INTERNAL_CHANNEL_ID, INTERNAL_READ_KEY, maxResults),
+          fetchChannelFeeds(EXTERNAL_CHANNEL_ID, EXTERNAL_READ_KEY, maxResults)
+        ]);
+
+        const intFiltered = filterByRange(intFeeds, hours);
+        const extFiltered = filterByRange(extFeeds, hours);
+
+        infoIntCount.textContent = intFiltered.length;
+        infoExtCount.textContent = extFiltered.length;
+        infoRange.textContent = currentRange;
+
+        const rows = [];
+
+        intFiltered.sort((a, b) => a.time - b.time).forEach(f => {
+          const t = f.time;
+          const raw = f.raw;
+
+          const tempInt = parseFloat(raw["field" + INTERNAL_FIELDS.temp]);
+          const humInt  = parseFloat(raw["field" + INTERNAL_FIELDS.hum]);
+          const press   = parseFloat(raw["field" + INTERNAL_FIELDS.press]);
+          const cpu     = parseFloat(raw["field" + INTERNAL_FIELDS.cpu]);
+
+          // match EXT entro 5 minuti
+          let nearestExt = { tempExt: null, humExt: null };
+          let minDelta = Infinity;
+          extFiltered.forEach(e => {
+            const dt = Math.abs(e.time - t);
+            if (dt < minDelta && dt <= 5 * 60 * 1000) {
+              minDelta = dt;
+              const r = e.raw;
+              const te = parseFloat(r["field" + EXTERNAL_FIELDS.temp]);
+              const he = parseFloat(r["field" + EXTERNAL_FIELDS.hum]);
+              nearestExt = {
+                tempExt: Number.isFinite(te) ? te : null,
+                humExt:  Number.isFinite(he) ? he : null
+              };
+            }
+          });
+
+          const display = [
+            fmtDateTime(t),
+            Number.isFinite(tempInt) ? tempInt.toFixed(2) : "--",
+            Number.isFinite(humInt)  ? humInt.toFixed(1)  : "--",
+            Number.isFinite(press)   ? press.toFixed(1)   : "--",
+            Number.isFinite(cpu)     ? cpu.toFixed(1)     : "--",
+            nearestExt.tempExt != null ? nearestExt.tempExt.toFixed(2) : "--",
+            nearestExt.humExt  != null ? nearestExt.humExt.toFixed(1)  : "--"
+          ];
+
+          rows.push({
+            time: t,
+            tempInt: Number.isFinite(tempInt) ? tempInt : null,
+            humInt:  Number.isFinite(humInt)  ? humInt  : null,
+            press:   Number.isFinite(press)   ? press   : null,
+            cpu:     Number.isFinite(cpu)     ? cpu     : null,
+            tempExt: nearestExt.tempExt,
+            humExt:  nearestExt.humExt,
+            display
+          });
+        });
+
+        // aggiorna "ultimo dato"
+        if (rows.length) {
+          infoLastTs.textContent = fmtDateTime(rows[rows.length - 1].time);
+        } else {
+          infoLastTs.textContent = "--";
+        }
+
+        allRows = rows;
+
+        // quando cambio intervallo, se vuoi che i filtri si resettono:
+        // for (const k in columnFilters) delete columnFilters[k];
+
+        applyFiltersAndRender();
+
+      } catch (err) {
+        console.error(err);
+        statusEl.textContent = "Errore nel caricamento da ThingSpeak.";
+        statusEl.classList.add("error");
+      }
+    }
+
+    // ========================
+    // BOTTONI RANGE
+    // ========================
+
+    function setupRangeButtons() {
+      const btns = document.querySelectorAll(".btn-range");
+      btns.forEach(btn => {
+        const r = btn.dataset.range;
+        if (r === currentRange) btn.classList.add("active");
+        btn.addEventListener("click", () => {
+          currentRange = r;
+          btns.forEach(b => b.classList.toggle("active", b.dataset.range === r));
+          loadAndRenderTable();
+        });
+      });
+    }
+
+    // ========================
+    // AVVIO
+    // ========================
+
+    window.addEventListener("load", () => {
+      setupRangeButtons();
+      setupHeaderFilterButtons();
+      setupFilterPopupEvents();
+      loadAndRenderTable();
+      setInterval(loadAndRenderTable, 120000);
+    });
+  </script>
+</body>
+</html>
