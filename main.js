@@ -177,26 +177,25 @@ function computeTimeFeatures(tsNow) {
   return { hour, doy, hourSin, hourCos, doySin, doyCos };
 }
 
-function buildForecastFeatures(intFiltered, extFiltered) {
-  if (!intFiltered.length) return null;
+function buildForecastFeatures(esp32Filtered) {
+  if (!esp32Filtered.length) return null;
 
-  const recentPress = filterByRange(intFiltered, MAX_WINDOW_HOURS, currentEndTime);
+  const recentPress = filterByRange(esp32Filtered, MAX_WINDOW_HOURS, currentEndTime);
   if (recentPress.length < 3) return null;
 
   const tsPress = recentPress.map(p => p.time);
   const pVals = recentPress.map(p => {
-    const v = parseFloat(p.raw["field" + INTERNAL_FIELDS.press]);
+    const v = parseFloat(p.raw["field" + ESP32_FIELDS.press]);
     return Number.isFinite(v) ? v : null;
   });
 
-  const recentExt = filterByRange(extFiltered, MAX_WINDOW_HOURS, currentEndTime);
-  const tsExt = recentExt.map(p => p.time);
-  const uExtVals = recentExt.map(p => {
-    const v = parseFloat(p.raw["field" + EXTERNAL_FIELDS.hum]);
+  const tsExt = recentPress.map(p => p.time);
+  const uExtVals = recentPress.map(p => {
+    const v = parseFloat(p.raw["field" + ESP32_FIELDS.hum]);
     return Number.isFinite(v) ? v : null;
   });
-  const tExtVals = recentExt.map(p => {
-    const v = parseFloat(p.raw["field" + EXTERNAL_FIELDS.temp]);
+  const tExtVals = recentPress.map(p => {
+    const v = parseFloat(p.raw["field" + ESP32_FIELDS.temp]);
     return Number.isFinite(v) ? v : null;
   });
 
