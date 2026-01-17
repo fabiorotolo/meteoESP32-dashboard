@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
   <meta charset="UTF-8" />
-  <title>Meteo – Tabella dati</title>
+  <title>ESP32 Meteo – Tabella dati</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
   <style>
@@ -356,8 +356,8 @@
   <div class="page">
     <div class="page-header">
       <div class="title-block">
-        <h1>Meteo – Dati grezzi</h1>
-        <span>Tabella dati da ThingSpeak (INT + EXT) con filtro temporale e filtri tipo Excel</span>
+        <h1>ESP32 Meteo – Dati grezzi</h1>
+        <span>Tabella dati da ThingSpeak (ESP32) con filtro temporale e filtri tipo Excel</span>
       </div>
       <div class="range-buttons">
         <button class="btn-range" data-range="1h">1h</button>
@@ -373,8 +373,7 @@
 
     <div class="info-bar">
       <span>Ultimo dato: <strong id="info-last-ts">--</strong></span>
-      <span>Punti INT: <strong id="info-int-count">0</strong></span>
-      <span>Punti EXT: <strong id="info-ext-count">0</strong></span>
+      <span>Punti ESP32: <strong id="info-esp32-count">0</strong></span>
       <span>Intervallo: <strong id="info-range">--</strong></span>
       <span class="tag">
         <span class="tag-dot"></span>
@@ -398,16 +397,16 @@
             </th>
             <th>
               <div class="th-filter">
-                <span>Temp INT (°C)</span>
-                <button class="filter-btn" data-col="1" title="Filtro Temp INT">
+                <span>Temp ESP32 (°C)</span>
+                <button class="filter-btn" data-col="1" title="Filtro Temp ESP32">
                   <span>⇵</span>
                 </button>
               </div>
             </th>
             <th>
               <div class="th-filter">
-                <span>UR INT (%)</span>
-                <button class="filter-btn" data-col="2" title="Filtro UR INT">
+                <span>UR ESP32 (%)</span>
+                <button class="filter-btn" data-col="2" title="Filtro UR ESP32">
                   <span>⇵</span>
                 </button>
               </div>
@@ -424,22 +423,6 @@
               <div class="th-filter">
                 <span>CPU (°C)</span>
                 <button class="filter-btn" data-col="4" title="Filtro CPU">
-                  <span>⇵</span>
-                </button>
-              </div>
-            </th>
-            <th>
-              <div class="th-filter">
-                <span>Temp EXT (°C)</span>
-                <button class="filter-btn" data-col="5" title="Filtro Temp EXT">
-                  <span>⇵</span>
-                </button>
-              </div>
-            </th>
-            <th>
-              <div class="th-filter">
-                <span>UR EXT (%)</span>
-                <button class="filter-btn" data-col="6" title="Filtro UR EXT">
                   <span>⇵</span>
                 </button>
               </div>
@@ -474,20 +457,14 @@
     // CONFIG THINGSPEAK
     // ========================
 
-    const INTERNAL_CHANNEL_ID = 3152991;               // meteo_data
-    const INTERNAL_READ_KEY   = "3I7MYYDZS4IKL3YJ";
-    const INTERNAL_FIELDS = {
-      temp: 4,
-      hum: 2,
-      press: 3,
-      cpu: 5
-    };
-
-    const EXTERNAL_CHANNEL_ID = 3181129;               // ESP32_01
-    const EXTERNAL_READ_KEY   = "7JYH3JOONPFPNQNE";
-    const EXTERNAL_FIELDS = {
-      hum: 1,
-      temp: 2
+    // Canale ESP32 (unico canale)
+    const ESP32_CHANNEL_ID = 3230363;
+    const ESP32_READ_KEY   = "37X0VL8GXSO0TB70";
+    const ESP32_FIELDS = {
+      temp: 1,   // temperatura esterna
+      hum: 2,    // umidità esterna
+      press: 3,  // pressione
+      cpu: 4     // temp CPU
     };
 
     const RANGE_HOURS = {
@@ -767,8 +744,7 @@
     async function loadAndRenderTable() {
       const statusEl = document.getElementById("status");
       const infoLastTs = document.getElementById("info-last-ts");
-      const infoIntCount = document.getElementById("info-int-count");
-      const infoExtCount = document.getElementById("info-ext-count");
+      const infoEsp32Count = document.getElementById("info-esp32-count");
       const infoRange = document.getElementById("info-range");
 
       statusEl.textContent = "Caricamento dati da ThingSpeak…";
@@ -782,64 +758,38 @@
           currentRange === "1m" ? 5000 :
           currentRange === "1w" ? 3000 : 2000;
 
-        const [intFeeds, extFeeds] = await Promise.all([
-          fetchChannelFeeds(INTERNAL_CHANNEL_ID, INTERNAL_READ_KEY, maxResults),
-          fetchChannelFeeds(EXTERNAL_CHANNEL_ID, EXTERNAL_READ_KEY, maxResults)
-        ]);
+        // Carica solo dal canale ESP32
+        const esp32Feeds = await fetchChannelFeeds(ESP32_CHANNEL_ID, ESP32_READ_KEY, maxResults);
+        const esp32Filtered = filterByRange(esp32Feeds, hours);
 
-        const intFiltered = filterByRange(intFeeds, hours);
-        const extFiltered = filterByRange(extFeeds, hours);
-
-        infoIntCount.textContent = intFiltered.length;
-        infoExtCount.textContent = extFiltered.length;
+        infoEsp32Count.textContent = esp32Filtered.length;
         infoRange.textContent = currentRange;
 
         const rows = [];
 
-        intFiltered.sort((a, b) => a.time - b.time).forEach(f => {
+        esp32Filtered.sort((a, b) => a.time - b.time).forEach(f => {
           const t = f.time;
           const raw = f.raw;
 
-          const tempInt = parseFloat(raw["field" + INTERNAL_FIELDS.temp]);
-          const humInt  = parseFloat(raw["field" + INTERNAL_FIELDS.hum]);
-          const press   = parseFloat(raw["field" + INTERNAL_FIELDS.press]);
-          const cpu     = parseFloat(raw["field" + INTERNAL_FIELDS.cpu]);
-
-          // match EXT entro 5 minuti
-          let nearestExt = { tempExt: null, humExt: null };
-          let minDelta = Infinity;
-          extFiltered.forEach(e => {
-            const dt = Math.abs(e.time - t);
-            if (dt < minDelta && dt <= 5 * 60 * 1000) {
-              minDelta = dt;
-              const r = e.raw;
-              const te = parseFloat(r["field" + EXTERNAL_FIELDS.temp]);
-              const he = parseFloat(r["field" + EXTERNAL_FIELDS.hum]);
-              nearestExt = {
-                tempExt: Number.isFinite(te) ? te : null,
-                humExt:  Number.isFinite(he) ? he : null
-              };
-            }
-          });
+          const temp = parseFloat(raw["field" + ESP32_FIELDS.temp]);
+          const hum  = parseFloat(raw["field" + ESP32_FIELDS.hum]);
+          const press = parseFloat(raw["field" + ESP32_FIELDS.press]);
+          const cpu = parseFloat(raw["field" + ESP32_FIELDS.cpu]);
 
           const display = [
             fmtDateTime(t),
-            Number.isFinite(tempInt) ? tempInt.toFixed(2) : "--",
-            Number.isFinite(humInt)  ? humInt.toFixed(1)  : "--",
-            Number.isFinite(press)   ? press.toFixed(1)   : "--",
-            Number.isFinite(cpu)     ? cpu.toFixed(1)     : "--",
-            nearestExt.tempExt != null ? nearestExt.tempExt.toFixed(2) : "--",
-            nearestExt.humExt  != null ? nearestExt.humExt.toFixed(1)  : "--"
+            Number.isFinite(temp) ? temp.toFixed(2) : "--",
+            Number.isFinite(hum)  ? hum.toFixed(1)  : "--",
+            Number.isFinite(press) ? press.toFixed(1) : "--",
+            Number.isFinite(cpu) ? cpu.toFixed(1) : "--"
           ];
 
           rows.push({
             time: t,
-            tempInt: Number.isFinite(tempInt) ? tempInt : null,
-            humInt:  Number.isFinite(humInt)  ? humInt  : null,
-            press:   Number.isFinite(press)   ? press   : null,
-            cpu:     Number.isFinite(cpu)     ? cpu     : null,
-            tempExt: nearestExt.tempExt,
-            humExt:  nearestExt.humExt,
+            temp: Number.isFinite(temp) ? temp : null,
+            hum:  Number.isFinite(hum)  ? hum  : null,
+            press: Number.isFinite(press) ? press : null,
+            cpu: Number.isFinite(cpu) ? cpu : null,
             display
           });
         });
